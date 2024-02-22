@@ -1,0 +1,20 @@
+{
+  "name": "githubapp",
+  "version": "1.0.0",
+  "description": "",
+  "main": "index.js",
+  "type": "module",
+  "scripts": {
+    "server": "node app.js"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "dependencies": {
+    "dotenv": "^16.4.5",
+    "octokit": "^3.1.2"
+  },
+  "devDependencies": {
+    "smee-client": "^2.0.1"
+  }
+}
