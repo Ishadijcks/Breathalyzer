@@ -1,6 +1,3 @@
-// These are the dependencies for this file.
-//
-// You installed the `dotenv` and `octokit` modules earlier. The `@octokit/webhooks` is a dependency of the `octokit` module, so you don't need to install it separately. The `fs` and `http` dependencies are built-in Node.js modules.
 import dotenv from "dotenv";
 import {App} from "octokit";
 import {createNodeMiddleware} from "@octokit/webhooks";
@@ -27,33 +24,55 @@ const app = new App({
     },
 });
 
-// This defines the message that your app will post to pull requests.
-const messageForNewPRs = "Thanks for opening a new PR! Please follow our contributing guidelines to make your PR easier to review.";
 
-// This adds an event handler that your code will call later. When this event handler is called, it will log the event to the console. Then, it will use GitHub's REST API to add a comment to the pull request that triggered the event.
-async function handlePullRequestOpened({octokit, payload}) {
-    console.log(`Received a pull request event for #${payload.pull_request.number}`);
+let pendingStatusChecks = [];
 
-    try {
-        await octokit.request("POST /repos/{owner}/{repo}/issues/{issue_number}/comments", {
-            owner: payload.repository.owner.login,
-            repo: payload.repository.name,
-            issue_number: payload.pull_request.number,
-            body: messageForNewPRs,
-            headers: {
-                "x-github-api-version": "2022-11-28",
-            },
-        });
-    } catch (error) {
-        if (error.response) {
-            console.error(`Error! Status: ${error.response.status}. Message: ${error.response.data.message}`)
-        }
-        console.error(error)
+async function completeStatusChecks(conclusion) {
+    for (const check of pendingStatusChecks) {
+        await check.octokit.rest.checks.update({
+            owner: check.owner,
+            repo: check.repo,
+            check_run_id: check.id,
+            conclusion: conclusion ? "success" : "failure",
+        })
     }
+    pendingStatusChecks = [];
 }
 
-// This sets up a webhook event listener. When your app receives a webhook event from GitHub with a `X-GitHub-Event` header value of `pull_request` and an `action` payload value of `opened`, it calls the `handlePullRequestOpened` event handler that is defined above.
-app.webhooks.on("pull_request.opened", handlePullRequestOpened);
+const triggers = ["🍺", "🍻", "drunk"]
+
+async function handleComment({octokit, payload}) {
+    const body = payload.review.body.toLowerCase();
+
+    const isSobrietyQuestioned = triggers.some(trigger => body.includes(trigger));
+    if (!isSobrietyQuestioned) {
+        return;
+    }
+
+    // Uh oh
+    const result = await octokit.rest.checks.create({
+        owner: payload.repository.owner.login,
+        repo: payload.repository.name,
+        name: "Breathalyzer",
+        status: "in_progress",
+        head_sha: payload.pull_request.head.sha
+    })
+
+    pendingStatusChecks.push({
+        octokit: octokit,
+        owner: payload.repository.owner.login,
+        repo: payload.repository.name,
+        id: result.data.id
+    })
+
+    setTimeout(() => {
+        completeStatusChecks(true);
+    }, 30000)
+
+}
+
+
+app.webhooks.on("pull_request_review", handleComment);
 
 // This logs any errors that occur.
 app.webhooks.onError((error) => {
@@ -64,11 +83,8 @@ app.webhooks.onError((error) => {
     }
 });
 
-// This determines where your server will listen.
-//
-// For local development, your server will listen to port 3000 on `localhost`. When you deploy your app, you will change these values. For more information, see "[Deploy your app](#deploy-your-app)."
-const port = 3000;
-const host = 'localhost';
+const port = process.env.PORT || 3000;
+const host = process.env.NODE_ENV === 'production' ? '0.0.0.0' : 'localhost';
 const path = "/api/webhook";
 const localWebhookUrl = `http://${host}:${port}${path}`;
 
@@ -86,3 +102,14 @@ http.createServer(middleware).listen(port, () => {
     console.log(`Server is listening for events at: ${localWebhookUrl}`);
     console.log('Press Ctrl + C to quit.')
 });
+
+
+setInterval(() => {
+    console.log("Pending status checks", pendingStatusChecks.map(check => {
+        return {
+            owner: check.owner,
+            repo: check.repo,
+            id: check.id,
+        }
+    }))
+}, 10000)
