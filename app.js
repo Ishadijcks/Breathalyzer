@@ -27,13 +27,17 @@ const app = new App({
 
 let pendingStatusChecks = [];
 
-async function completeStatusChecks(conclusion) {
+async function completeStatusChecks(conclusion, title, summary = "") {
     for (const check of pendingStatusChecks) {
         await check.octokit.rest.checks.update({
             owner: check.owner,
             repo: check.repo,
             check_run_id: check.id,
             conclusion: conclusion ? "success" : "failure",
+            output: {
+                title,
+                summary,
+            }
         })
     }
     pendingStatusChecks = [];
@@ -64,11 +68,6 @@ async function handleComment({octokit, payload}) {
         repo: payload.repository.name,
         id: result.data.id
     })
-
-    setTimeout(() => {
-        completeStatusChecks(true);
-    }, 30000)
-
 }
 
 
@@ -98,7 +97,24 @@ const localWebhookUrl = `http://${host}:${port}${path}`;
 const middleware = createNodeMiddleware(app.webhooks, {path});
 
 // This creates a Node.js server that listens for incoming HTTP requests (including webhook payloads from GitHub) on the specified port. When the server receives a request, it executes the `middleware` function that you defined earlier. Once the server is running, it logs messages to the console to indicate that it is listening.
-http.createServer(middleware).listen(port, () => {
+http.createServer(async (req, res) => {
+    if (req.url === path) {
+        return await middleware(req, res)
+    }
+
+    if (req.method === "POST") {
+        req.on('data', (data) => {
+            try {
+                const x = JSON.parse(Buffer.from(data).toString());
+                completeStatusChecks(x.success, `You blew a ${x.value}`);
+            } catch (e) {
+                console.error("Invalid request")
+            }
+        })
+    }
+
+
+}).listen(port, () => {
     console.log(`Server is listening for events at: ${localWebhookUrl}`);
     console.log('Press Ctrl + C to quit.')
 });
