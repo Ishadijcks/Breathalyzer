@@ -3,6 +3,7 @@ import {App} from "octokit";
 import {createNodeMiddleware} from "@octokit/webhooks";
 import fs from "fs";
 import http from "http";
+import * as url from "url";
 
 // This reads your `.env` file and adds the variables from that file to the `process.env` object in Node.js.
 dotenv.config();
@@ -103,17 +104,15 @@ http.createServer(async (req, res) => {
         return await middleware(req, res)
     }
 
+    const q = url.parse(req.url, true).query;
+    console.log(q.success);
+
     if (req.method === "POST") {
-        req.on('data', (data) => {
-            try {
-                const x = JSON.parse(Buffer.from(data).toString());
-                console.log("Got post request with data", data);
-                completeStatusChecks(x.success, `You blew a ${x.value}`);
-            } catch (e) {
-                console.error("Invalid request")
-            }
-        })
+        await completeStatusChecks(q.success, `You blew a ${q.value}`);
+
     }
+
+    return res.end("Success");
 
 
 }).listen(port, () => {
