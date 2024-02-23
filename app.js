@@ -34,7 +34,7 @@ async function completeStatusChecks(conclusion, title, summary = "") {
             owner: check.owner,
             repo: check.repo,
             check_run_id: check.id,
-            conclusion: conclusion ? "success" : "failure",
+            conclusion: (conclusion === 'true' || conclusion === true) ? "success" : "failure",
             output: {
                 title,
                 summary,
