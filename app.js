@@ -98,7 +98,7 @@ const middleware = createNodeMiddleware(app.webhooks, {path});
 
 // This creates a Node.js server that listens for incoming HTTP requests (including webhook payloads from GitHub) on the specified port. When the server receives a request, it executes the `middleware` function that you defined earlier. Once the server is running, it logs messages to the console to indicate that it is listening.
 http.createServer(async (req, res) => {
-    console.log("Incoming request", req);
+    console.log("Incoming request", req.url);
     if (req.url === path) {
         return await middleware(req, res)
     }
@@ -107,6 +107,7 @@ http.createServer(async (req, res) => {
         req.on('data', (data) => {
             try {
                 const x = JSON.parse(Buffer.from(data).toString());
+                console.log("Got post request with data", data);
                 completeStatusChecks(x.success, `You blew a ${x.value}`);
             } catch (e) {
                 console.error("Invalid request")
